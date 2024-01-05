@@ -1,9 +1,16 @@
-#![warn(clippy::pedantic, clippy::nursery)]
+#![warn(
+    clippy::pedantic,
+    clippy::nursery,
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic
+)]
 
 use itertools::{Itertools, PeekingNext};
 use object::Object;
 use std::fmt::Display;
 
+pub mod error;
 pub mod object;
 
 /// Checks whether the next characters of the iterator are equal to those of the string.
@@ -28,8 +35,9 @@ pub enum Json {
 }
 
 impl FromIterator<char> for Json {
+    #[allow(clippy::unwrap_used)]
     fn from_iter<T: IntoIterator<Item = char>>(iter: T) -> Self {
-        Self::new(&mut iter.into_iter().peekable())
+        Self::new(&mut iter.into_iter().peekable()).unwrap()
     }
 }
 
@@ -49,57 +57,64 @@ impl Display for Json {
 impl Json {
     /// Creates a json object from an iterator
     ///
-    /// # Panics
-    /// Panics if it finds an invalid value in the json text.
-    pub fn new<T: Iterator<Item = char> + PeekingNext>(iter: &mut T) -> Self {
+    /// # Errors
+    /// Returns an error if the iterator ended unexpectedly or a number failed to parse.
+    pub fn new<T: Iterator<Item = char> + PeekingNext>(iter: &mut T) -> Result<Self, error::Error> {
         // Skip all whitespace
         iter.peeking_take_while(|c| c.is_whitespace()).last();
 
         // Take the next character
-        let c = iter.next().expect("Unexpected end of text");
+        let c = iter.next().ok_or(error::Error::UnexpectedEndOfText)?;
         match c {
             // If it's 'n', it must be null
             'n' => {
-                assert!(compare_iter_str(iter, "ull"));
-                Self::Null
+                if !compare_iter_str(iter, "ull") {
+                    return Err(error::Error::InvalidJsonValue);
+                }
+                Ok(Self::Null)
             }
 
             // If it's 't', it must be true
             't' => {
-                assert!(compare_iter_str(iter, "rue"));
-                Self::Bool(true)
+                if !compare_iter_str(iter, "rue") {
+                    return Err(error::Error::InvalidJsonValue);
+                }
+                Ok(Self::Bool(true))
             }
 
             // If it's 'f', it must be false
             'f' => {
-                assert!(compare_iter_str(iter, "alse"));
-                Self::Bool(false)
+                if !compare_iter_str(iter, "alse") {
+                    return Err(error::Error::InvalidJsonValue);
+                }
+                Ok(Self::Bool(false))
             }
 
             // If it's a numeric character, it must be a number
-            '0'..='9' | '.' | '-' => Self::Number(Self::read_number(c, iter)),
+            '0'..='9' | '.' | '-' => Ok(Self::Number(Self::read_number(c, iter)?)),
 
             // If it's '"', it must be a string
-            '"' => Self::String(Self::read_string(iter)),
+            '"' => Ok(Self::String(Self::read_string(iter))),
 
             // If it's '[', it must be an array
-            '[' => Self::Array(Self::read_array(iter)),
+            '[' => Ok(Self::Array(Self::read_array(iter)?)),
 
             // If it's '{', it must be an object or dictionary
-            '{' => Self::Object(Self::read_object(iter)),
+            '{' => Ok(Self::Object(Self::read_object(iter)?)),
 
             // Otherwise, it's invalid
-            c => panic!("Invalid json value: {c}"),
+            c => Err(error::Error::InvalidStartOfJsonValue(c)),
         }
     }
 
     /// Reads a number from a json iterator
-    fn read_number<T: IntoIterator<Item = char>>(first: char, iter: T) -> f64
+    fn read_number<T: IntoIterator<Item = char>>(first: char, iter: T) -> Result<f64, error::Error>
     where
         T::IntoIter: PeekingNext,
     {
         // Take the iterator
-        iter.into_iter()
+        Ok(iter
+            .into_iter()
             // Only take numeric characters
             .peeking_take_while(|c| matches!(c, '0'..='9' | '.'))
             // Store them in a string
@@ -108,8 +123,7 @@ impl Json {
                 out
             })
             // parse that string as a float
-            .parse::<f64>()
-            .expect("Invalid number")
+            .parse::<f64>()?)
     }
 
     /// Reads a string from a json iterator
@@ -132,7 +146,9 @@ impl Json {
     }
 
     /// Read an array from a json iterator
-    fn read_array<T: Iterator<Item = char> + PeekingNext>(iter: &mut T) -> Vec<Self> {
+    fn read_array<T: Iterator<Item = char> + PeekingNext>(
+        iter: &mut T,
+    ) -> Result<Vec<Self>, error::Error> {
         // Create a vector
         let mut values = Vec::new();
 
@@ -146,7 +162,7 @@ impl Json {
             }
 
             // Add the value to the array
-            values.push(Self::new(iter));
+            values.push(Self::new(iter)?);
 
             // Skip all whitespace
             iter.peeking_take_while(|c| c.is_whitespace()).last();
@@ -157,16 +173,19 @@ impl Json {
             match iter.next() {
                 Some(']') => break,
                 Some(',') => {}
-                c => panic!("Unexpected character found in array: {c:?}"),
+                None => return Err(error::Error::UnexpectedEndOfText),
+                Some(c) => return Err(error::Error::UnexpectedCharacterInArray(c)),
             }
         }
         // Shrink the array
         values.shrink_to_fit();
 
-        values
+        Ok(values)
     }
 
-    fn read_object<T: Iterator<Item = char> + PeekingNext>(iter: &mut T) -> Object {
+    fn read_object<T: Iterator<Item = char> + PeekingNext>(
+        iter: &mut T,
+    ) -> Result<Object, error::Error> {
         // Create a vector
         let mut values = Object::default();
 
@@ -192,7 +211,7 @@ impl Json {
             assert_eq!(iter.next(), Some(':'));
 
             // Read the value
-            let value = Self::new(iter);
+            let value = Self::new(iter)?;
 
             // Add the key and value to the array
             values.add(key, value);
@@ -206,13 +225,14 @@ impl Json {
             match iter.next() {
                 Some('}') => break,
                 Some(',') => {}
-                c => panic!("Unexpected character found in object: {c:?}"),
+                None => return Err(error::Error::UnexpectedEndOfText),
+                Some(c) => return Err(error::Error::UnexpectedCharacterInArray(c)),
             }
         }
 
         // Shrink the array
         values.shrink_to_fit();
-        values
+        Ok(values)
     }
 }
 

@@ -10,3 +10,4 @@ debug = true
 
 [dependencies]
 itertools = "0.12.0"
+thiserror = "1.0.56"
