@@ -51,5 +51,6 @@ fn main() {
     };
 
     // Convert the iterator to json
-    Json::from_iter(iter);
+    let json = Json::from_iter(iter);
+    println!("{json}");
 }

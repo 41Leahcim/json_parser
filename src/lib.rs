@@ -1,6 +1,10 @@
 #![warn(clippy::pedantic, clippy::nursery)]
 
 use itertools::{Itertools, PeekingNext};
+use object::Object;
+use std::fmt::Display;
+
+pub mod object;
 
 /// Checks whether the next characters of the iterator are equal to those of the string.
 fn compare_iter_str(iter: impl IntoIterator<Item = char>, string: &str) -> bool {
@@ -12,6 +16,7 @@ fn compare_iter_str(iter: impl IntoIterator<Item = char>, string: &str) -> bool 
         == string.len()
 }
 
+/// An enum representing a json value
 #[derive(Debug, PartialEq)]
 pub enum Json {
     Null,
@@ -19,12 +24,25 @@ pub enum Json {
     Number(f64),
     String(String),
     Array(Vec<Json>),
-    Object(Vec<(String, Json)>),
+    Object(Object),
 }
 
 impl FromIterator<char> for Json {
     fn from_iter<T: IntoIterator<Item = char>>(iter: T) -> Self {
         Self::new(&mut iter.into_iter().peekable())
+    }
+}
+
+impl Display for Json {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Null => write!(f, "null"),
+            Self::Bool(value) => write!(f, "{value}"),
+            Self::Number(value) => write!(f, "{value}"),
+            Self::String(value) => write!(f, "\"{value}\""),
+            Self::Array(values) => write!(f, "{}", values.iter().map(Self::to_string).join(",")),
+            Self::Object(values) => write!(f, "{values}"),
+        }
     }
 }
 
@@ -148,9 +166,9 @@ impl Json {
         values
     }
 
-    fn read_object<T: Iterator<Item = char> + PeekingNext>(iter: &mut T) -> Vec<(String, Self)> {
+    fn read_object<T: Iterator<Item = char> + PeekingNext>(iter: &mut T) -> Object {
         // Create a vector
-        let mut values = Vec::new();
+        let mut values = Object::default();
 
         loop {
             // Skip all whitespace
@@ -177,7 +195,7 @@ impl Json {
             let value = Self::new(iter);
 
             // Add the key and value to the array
-            values.push((key, value));
+            values.add(key, value);
 
             // Skip all whitespace
             iter.peeking_take_while(|c| c.is_whitespace()).last();
@@ -249,12 +267,15 @@ mod tests {
             "{\"first\":null,\"second\":true,\"third\":128,\"last\":\"test\"}"
                 .chars()
                 .collect::<Json>(),
-            Json::Object(vec![
-                ("first".to_owned(), Json::Null),
-                ("second".to_owned(), Json::Bool(true)),
-                ("third".to_owned(), Json::Number(128.0)),
-                ("last".to_owned(), Json::String("test".to_owned()))
-            ])
+            Json::Object(
+                vec![
+                    ("first".to_owned(), Json::Null),
+                    ("second".to_owned(), Json::Bool(true)),
+                    ("third".to_owned(), Json::Number(128.0)),
+                    ("last".to_owned(), Json::String("test".to_owned()))
+                ]
+                .into()
+            )
         );
     }
 }
