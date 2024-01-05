@@ -4,7 +4,7 @@ use std::{
     io::{BufReader, Read},
 };
 
-use json::Json;
+use json_parser::Json;
 
 struct BytesToChars<T> {
     iter: T,
