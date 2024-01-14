@@ -2,6 +2,7 @@ use std::{
     env::args,
     fs::File,
     io::{BufReader, Read},
+    time::Instant,
 };
 
 use json_parser::Json;
@@ -50,7 +51,23 @@ fn main() {
         iter: reader.bytes().map(|c| c.unwrap()),
     };
 
+    let start = Instant::now();
+
     // Convert the iterator to json
     let json = Json::from_iter(iter);
-    println!("{json}");
+    let generating_json = Instant::now();
+
+    // Print the json
+    println!("{json}\n");
+    let printing_json = Instant::now();
+
+    // Print performance
+    println!(
+        "Generated json in {} seconds",
+        (generating_json - start).as_secs_f64()
+    );
+    println!(
+        "Printed json in {} seconds",
+        (printing_json - generating_json).as_secs_f64()
+    );
 }
