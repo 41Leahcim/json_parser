@@ -1,6 +1,4 @@
-use std::fmt::{Display, Write as _};
-
-use itertools::Itertools as _;
+use std::fmt::Display;
 
 use crate::Json;
 
@@ -17,18 +15,14 @@ impl From<Vec<(String, Json)>> for Object {
 
 impl Display for Object {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "{{{}}}",
-            self.values
-                .iter()
-                .map(|(key, value)| {
-                    let mut output = key.clone();
-                    write!(&mut output, ":{value}").unwrap();
-                    output
-                })
-                .join(",")
-        )
+        write!(f, "{{")?;
+        if !self.values.is_empty() {
+            write!(f, "{:?}:{}", self.values[0].0, self.values[0].1)?;
+            for (key, value) in self.values.iter().skip(1) {
+                write!(f, ",{key:?}:{value}")?;
+            }
+        }
+        write!(f, "}}")
     }
 }
 

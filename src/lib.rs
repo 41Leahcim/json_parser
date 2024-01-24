@@ -48,7 +48,16 @@ impl Display for Json {
             Self::Bool(value) => write!(f, "{value}"),
             Self::Number(value) => write!(f, "{value}"),
             Self::String(value) => write!(f, "\"{value}\""),
-            Self::Array(values) => write!(f, "{}", values.iter().map(Self::to_string).join(",")),
+            Self::Array(values) => {
+                write!(f, "[")?;
+                if !values.is_empty() {
+                    write!(f, "{}", values[0])?;
+                    for value in values.iter().skip(1) {
+                        write!(f, ",{value}")?;
+                    }
+                }
+                write!(f, "]")
+            }
             Self::Object(values) => write!(f, "{values}"),
         }
     }
