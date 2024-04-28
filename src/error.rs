@@ -1,17 +1,25 @@
-use std::{fmt::Display, num::ParseFloatError};
+use core::{
+    fmt::{self, Display, Formatter},
+    num::ParseFloatError,
+};
 
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug)]
+#[non_exhaustive]
+#[allow(clippy::error_impl_error)]
 pub enum Error {
     UnexpectedEndOfText,
-    FloatError(#[from] ParseFloatError),
+    FloatError(ParseFloatError),
     InvalidStartOfJsonValue(char),
     UnexpectedCharacterInArray(char),
     UnexpectedCharacterInObject(char),
     InvalidJsonValue,
+    InvalidObjectKey,
+    MissingKeyValueSeparator,
 }
 
 impl Display for Error {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{self:?}")
+    #[inline]
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> fmt::Result {
+        write!(formatter, "{self:?}")
     }
 }

@@ -1,14 +1,24 @@
-#![warn(
-    clippy::pedantic,
-    clippy::nursery,
-    clippy::unwrap_used,
-    clippy::expect_used,
-    clippy::panic
+#![no_std]
+#![warn(clippy::pedantic, clippy::nursery, clippy::restriction)]
+#![allow(
+    clippy::missing_docs_in_private_items,
+    clippy::blanket_clippy_restriction_lints,
+    clippy::implicit_return,
+    clippy::question_mark_used,
+    clippy::pattern_type_mismatch,
+    clippy::use_debug,
+    clippy::shadow_unrelated
 )]
 
+extern crate alloc;
+
+use alloc::{
+    string::{String, ToString as _},
+    vec::Vec,
+};
+use core::fmt::{self, Display, Formatter};
 use itertools::{Itertools, PeekingNext};
 use object::Object;
-use std::fmt::Display;
 
 pub mod error;
 pub mod object;
@@ -24,6 +34,7 @@ fn compare_iter_str(iter: impl IntoIterator<Item = char>, string: &str) -> bool 
 }
 
 /// An enum representing a json value
+#[non_exhaustive]
 #[derive(Debug, PartialEq)]
 pub enum Json {
     Null,
@@ -36,29 +47,31 @@ pub enum Json {
 
 impl FromIterator<char> for Json {
     #[allow(clippy::unwrap_used)]
+    #[inline]
     fn from_iter<T: IntoIterator<Item = char>>(iter: T) -> Self {
         Self::new(&mut iter.into_iter().peekable()).unwrap()
     }
 }
 
 impl Display for Json {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    #[inline]
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Null => write!(f, "null"),
-            Self::Bool(value) => write!(f, "{value}"),
-            Self::Number(value) => write!(f, "{value}"),
-            Self::String(value) => write!(f, "\"{value}\""),
+            Self::Null => write!(formatter, "null"),
+            Self::Bool(value) => write!(formatter, "{value}"),
+            Self::Number(value) => write!(formatter, "{value}"),
+            Self::String(value) => write!(formatter, "\"{value}\""),
             Self::Array(values) => {
-                write!(f, "[")?;
-                if !values.is_empty() {
-                    write!(f, "{}", values[0])?;
+                write!(formatter, "[")?;
+                if let Some(first_value) = values.first() {
+                    write!(formatter, "{first_value}")?;
                     for value in values.iter().skip(1) {
-                        write!(f, ",{value}")?;
+                        write!(formatter, ",{value}")?;
                     }
                 }
-                write!(f, "]")
+                write!(formatter, "]")
             }
-            Self::Object(values) => write!(f, "{values}"),
+            Self::Object(values) => write!(formatter, "{values}"),
         }
     }
 }
@@ -68,13 +81,14 @@ impl Json {
     ///
     /// # Errors
     /// Returns an error if the iterator ended unexpectedly or a number failed to parse.
+    #[inline]
     pub fn new<T: Iterator<Item = char> + PeekingNext>(iter: &mut T) -> Result<Self, error::Error> {
         // Skip all whitespace
-        iter.peeking_take_while(|c| c.is_whitespace()).last();
+        iter.peeking_take_while(|ch| ch.is_whitespace()).last();
 
         // Take the next character
-        let c = iter.next().ok_or(error::Error::UnexpectedEndOfText)?;
-        match c {
+        let current = iter.next().ok_or(error::Error::UnexpectedEndOfText)?;
+        match current {
             // If it's 'n', it must be null
             'n' => {
                 if !compare_iter_str(iter, "ull") {
@@ -100,7 +114,7 @@ impl Json {
             }
 
             // If it's a numeric character, it must be a number
-            '0'..='9' | '.' | '-' => Ok(Self::Number(Self::read_number(c, iter)?)),
+            '0'..='9' | '.' | '-' => Ok(Self::Number(Self::read_number(current, iter)?)),
 
             // If it's '"', it must be a string
             '"' => Ok(Self::String(Self::read_string(iter))),
@@ -112,27 +126,28 @@ impl Json {
             '{' => Ok(Self::Object(Self::read_object(iter)?)),
 
             // Otherwise, it's invalid
-            c => Err(error::Error::InvalidStartOfJsonValue(c)),
+            invalid_char => Err(error::Error::InvalidStartOfJsonValue(invalid_char)),
         }
     }
 
     /// Reads a number from a json iterator
+    #[allow(clippy::single_call_fn)]
     fn read_number<T: IntoIterator<Item = char>>(first: char, iter: T) -> Result<f64, error::Error>
     where
         T::IntoIter: PeekingNext,
     {
         // Take the iterator
-        Ok(iter
-            .into_iter()
+        iter.into_iter()
             // Only take numeric characters
-            .peeking_take_while(|c| matches!(c, '0'..='9' | '.'))
+            .peeking_take_while(|ch| matches!(ch, '0'..='9' | '.'))
             // Store them in a string
             .fold(first.to_string(), |mut out, value| {
                 out.push(value);
                 out
             })
             // parse that string as a float
-            .parse::<f64>()?)
+            .parse::<f64>()
+            .map_err(error::Error::FloatError)
     }
 
     /// Reads a string from a json iterator
@@ -142,9 +157,9 @@ impl Json {
 
         // Take all characters until an unescaped '"' is found and store them in a string
         let mut result = iter
-            .take_while(|&c| {
-                let should_continue = escaped || c != '"';
-                escaped = c == '\\' && !escaped;
+            .take_while(|&ch| {
+                let should_continue = escaped || ch != '"';
+                escaped = ch == '\\' && !escaped;
                 should_continue
             })
             .collect::<String>();
@@ -155,6 +170,7 @@ impl Json {
     }
 
     /// Read an array from a json iterator
+    #[allow(clippy::single_call_fn)]
     fn read_array<T: Iterator<Item = char> + PeekingNext>(
         iter: &mut T,
     ) -> Result<Vec<Self>, error::Error> {
@@ -163,10 +179,10 @@ impl Json {
 
         loop {
             // Skip all whitespace
-            iter.peeking_take_while(|c| c.is_whitespace()).last();
+            iter.peeking_take_while(|ch| ch.is_whitespace()).last();
 
             // Stop if the next character closes this array
-            if iter.peeking_next(|c| *c == ']').is_some() {
+            if iter.peeking_next(|ch| *ch == ']').is_some() {
                 break;
             }
 
@@ -174,7 +190,7 @@ impl Json {
             values.push(Self::new(iter)?);
 
             // Skip all whitespace
-            iter.peeking_take_while(|c| c.is_whitespace()).last();
+            iter.peeking_take_while(|ch| ch.is_whitespace()).last();
 
             // Stop if the next character closes the array.
             // Ignore ','
@@ -183,7 +199,9 @@ impl Json {
                 Some(']') => break,
                 Some(',') => {}
                 None => return Err(error::Error::UnexpectedEndOfText),
-                Some(c) => return Err(error::Error::UnexpectedCharacterInArray(c)),
+                Some(invalid_char) => {
+                    return Err(error::Error::UnexpectedCharacterInArray(invalid_char))
+                }
             }
         }
         // Shrink the array
@@ -192,6 +210,7 @@ impl Json {
         Ok(values)
     }
 
+    #[allow(clippy::single_call_fn)]
     fn read_object<T: Iterator<Item = char> + PeekingNext>(
         iter: &mut T,
     ) -> Result<Object, error::Error> {
@@ -200,24 +219,28 @@ impl Json {
 
         loop {
             // Skip all whitespace
-            iter.peeking_take_while(|c| c.is_whitespace()).last();
+            iter.peeking_take_while(|ch| ch.is_whitespace()).last();
 
             // Stop if the next character closes the object
-            if iter.peeking_next(|c| *c == '}').is_some() {
+            if iter.peeking_next(|ch| *ch == '}').is_some() {
                 break;
             }
 
             // Make sure the next character starts a string
-            assert_eq!(iter.next(), Some('"'));
+            if iter.next() != Some('"') {
+                return Err(error::Error::InvalidObjectKey);
+            }
 
             // Read the string as the key
             let key = Self::read_string(iter);
 
             // Skip all whitespace
-            iter.peeking_take_while(|c| c.is_whitespace()).last();
+            iter.peeking_take_while(|ch| ch.is_whitespace()).last();
 
             // Make sure the next character is a key-value seperator
-            assert_eq!(iter.next(), Some(':'));
+            if iter.next() != Some(':') {
+                return Err(error::Error::MissingKeyValueSeparator);
+            }
 
             // Read the value
             let value = Self::new(iter)?;
@@ -226,7 +249,7 @@ impl Json {
             values.add(key, value);
 
             // Skip all whitespace
-            iter.peeking_take_while(|c| c.is_whitespace()).last();
+            iter.peeking_take_while(|ch| ch.is_whitespace()).last();
 
             // Stop if the next character ends the object.
             // Ignore ','
@@ -235,7 +258,9 @@ impl Json {
                 Some('}') => break,
                 Some(',') => {}
                 None => return Err(error::Error::UnexpectedEndOfText),
-                Some(c) => return Err(error::Error::UnexpectedCharacterInArray(c)),
+                Some(invalid_char) => {
+                    return Err(error::Error::UnexpectedCharacterInArray(invalid_char))
+                }
             }
         }
 
@@ -247,6 +272,8 @@ impl Json {
 
 #[cfg(test)]
 mod tests {
+    use alloc::{borrow::ToOwned as _, vec};
+
     use crate::Json;
 
     #[test]

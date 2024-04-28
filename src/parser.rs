@@ -6,6 +6,10 @@ use std::{
 };
 
 use json_parser::Json;
+use mimalloc::MiMalloc;
+
+#[global_allocator]
+static GLOBAL: MiMalloc = MiMalloc;
 
 struct BytesToChars<T> {
     iter: T,
