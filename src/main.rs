@@ -1,3 +1,15 @@
+#![warn(clippy::pedantic, clippy::nursery, clippy::restriction)]
+#![allow(
+    clippy::missing_docs_in_private_items,
+    clippy::blanket_clippy_restriction_lints,
+    clippy::missing_trait_methods,
+    clippy::arithmetic_side_effects,
+    clippy::default_numeric_fallback,
+    clippy::implicit_return,
+    clippy::expect_used,
+    clippy::print_stdout
+)]
+
 use std::{
     env::args,
     fs::File,
@@ -19,13 +31,13 @@ impl<T: Iterator<Item = u8>> Iterator for BytesToChars<T> {
         let mut value = 0;
 
         // Take at most 4 bytes, for the size of the utf-8 value
-        for c in self.iter.by_ref().take(4) {
+        for byte in self.iter.by_ref().take(4) {
             // Shift the value 8 bits, and add the current byte
-            value = value * 256 + c as u32;
+            value = (value << 8) + u32::from(byte);
 
             // Return the current character if it's valid utf-8
-            if let Some(c) = char::from_u32(value) {
-                return Some(c);
+            if let Some(ch) = char::from_u32(value) {
+                return Some(ch);
             }
         }
 
@@ -54,7 +66,7 @@ fn main() {
     let start = Instant::now();
 
     // Convert the iterator to json
-    let json = Json::from_iter(iter);
+    let json = iter.collect::<Json>();
     let generating_json = Instant::now();
 
     // Print the json
