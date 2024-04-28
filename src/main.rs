@@ -6,10 +6,6 @@ use std::{
 };
 
 use json_parser::Json;
-use mimalloc::MiMalloc;
-
-#[global_allocator]
-static GLOBAL: MiMalloc = MiMalloc;
 
 struct BytesToChars<T> {
     iter: T,
@@ -52,7 +48,7 @@ fn main() {
 
     // Add an iterator to convert the bytes to chars
     let iter = BytesToChars {
-        iter: reader.bytes().map(|c| c.unwrap()),
+        iter: reader.bytes().map_while(Result::ok),
     };
 
     let start = Instant::now();
