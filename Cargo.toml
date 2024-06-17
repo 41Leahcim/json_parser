@@ -9,4 +9,4 @@ edition = "2021"
 debug = true
 
 [dependencies]
-itertools = {version = "0.12.0", default-features = false}
+itertools = {version = "0.13", default-features = false}

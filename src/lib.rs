@@ -7,7 +7,8 @@
     clippy::question_mark_used,
     clippy::pattern_type_mismatch,
     clippy::use_debug,
-    clippy::shadow_unrelated
+    clippy::shadow_unrelated,
+    clippy::min_ident_chars
 )]
 
 extern crate alloc;
@@ -55,23 +56,23 @@ impl FromIterator<char> for Json {
 
 impl Display for Json {
     #[inline]
-    fn fmt(&self, formatter: &mut Formatter<'_>) -> fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Null => write!(formatter, "null"),
-            Self::Bool(value) => write!(formatter, "{value}"),
-            Self::Number(value) => write!(formatter, "{value}"),
-            Self::String(value) => write!(formatter, "\"{value}\""),
+            Self::Null => write!(f, "null"),
+            Self::Bool(value) => write!(f, "{value}"),
+            Self::Number(value) => write!(f, "{value}"),
+            Self::String(value) => write!(f, "\"{value}\""),
             Self::Array(values) => {
-                write!(formatter, "[")?;
+                write!(f, "[")?;
                 if let Some(first_value) = values.first() {
-                    write!(formatter, "{first_value}")?;
+                    write!(f, "{first_value}")?;
                     for value in values.iter().skip(1) {
-                        write!(formatter, ",{value}")?;
+                        write!(f, ",{value}")?;
                     }
                 }
-                write!(formatter, "]")
+                write!(f, "]")
             }
-            Self::Object(values) => write!(formatter, "{values}"),
+            Self::Object(values) => write!(f, "{values}"),
         }
     }
 }

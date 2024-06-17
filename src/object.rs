@@ -18,16 +18,16 @@ impl From<Vec<(String, Json)>> for Object {
 
 impl Display for Object {
     #[inline]
-    fn fmt(&self, formatter: &mut Formatter<'_>) -> fmt::Result {
-        write!(formatter, "{{")?;
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "{{")?;
         let mut values = self.values.iter();
         if let Some((key, value)) = values.next() {
-            write!(formatter, "{key:?}:{value}")?;
+            write!(f, "{key:?}:{value}")?;
             for (key, value) in values {
-                write!(formatter, ",{key:?}:{value}")?;
+                write!(f, ",{key:?}:{value}")?;
             }
         }
-        write!(formatter, "}}")
+        write!(f, "}}")
     }
 }
 
